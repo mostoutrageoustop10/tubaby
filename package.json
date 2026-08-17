@@ -1,0 +1,24 @@
+{
+  "name": "tiibaby-shop",
+  "version": "2.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "next": "14.2.3",
+    "react": "^18",
+    "react-dom": "^18",
+    "sharp": "^0.33.3"
+  },
+  "optionalDependencies": {
+    "@supabase/supabase-js": "^2.43.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18"
+  }
+}
