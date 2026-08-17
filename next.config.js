@@ -1,10 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
+  output: 'export',
   images: { unoptimized: true },
-  experimental: {
-    serverComponentsExternalPackages: ['@supabase/supabase-js', 'sharp']
-  },
   typescript: {
     ignoreBuildErrors: true
   }
