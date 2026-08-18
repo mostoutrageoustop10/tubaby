@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
-import fs   from "fs";
-import path from "path";
-import { compressImage }     from "@/lib/compress";
+import { compressImage } from "@/lib/compress";
 import { addProduct, detectCategory, applyMarkup, extractFromFilename } from "@/lib/products";
 import { supabase, supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "auto";
 
-const IMAGES_DIR = path.join(process.cwd(), "public", "images");
-const ALLOWED    = new Set(["image/jpeg","image/png","image/webp","image/gif","image/avif"]);
-const MAX_BYTES  = 10 * 1024 * 1024;
+const ALLOWED  = new Set(["image/jpeg","image/png","image/webp","image/gif","image/avif"]);
+const MAX_BYTES = 10 * 1024 * 1024;
+const DEFAULT_FALLBACK_URL = "https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=500&q=80";
 
 async function extractWithClaude(buffer, mimeType, filename) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -43,13 +41,27 @@ Filename hint: "${filename}"
   return JSON.parse(text.replace(/```json|```/gi,"").trim());
 }
 
+async function uploadToSupabase(storageClient, filename, buffer, contentType) {
+  const { data, error } = await storageClient.storage
+    .from("product-images")
+    .upload(filename, buffer, { contentType, upsert: true });
+
+  if (error) throw new Error(`Supabase upload failed: ${error.message}`);
+
+  const { data: { publicUrl } } = storageClient.storage
+    .from("product-images")
+    .getPublicUrl(filename);
+
+  return publicUrl;
+}
+
 export async function POST(request) {
   try {
     const formData = await request.formData();
     const file     = formData.get("file");
 
     if (!file)                   return NextResponse.json({ error:"No file provided" },  { status:400 });
-    if (!ALLOWED.has(file.type)) return NextResponse.json({ error:"Images only" },         { status:400 });
+    if (!ALLOWED.has(file.type)) return NextResponse.json({ error:"Images only" },        { status:400 });
 
     const rawBuffer = Buffer.from(await file.arrayBuffer());
     if (rawBuffer.byteLength > MAX_BYTES) return NextResponse.json({ error:"Max 10 MB" }, { status:400 });
@@ -58,36 +70,19 @@ export async function POST(request) {
     const { buffer, filename: savedName, originalKb, compressedKb } =
       await compressImage(rawBuffer, file.name);
 
-    let imagePath = `/images/${savedName}`;
     const storageClient = supabaseAdmin || supabase;
+    let imagePath = DEFAULT_FALLBACK_URL;
 
     if (storageClient) {
       try {
-        const { data: uploadData, error: uploadError } = await storageClient.storage
-          .from("product-images")
-          .upload(savedName, buffer, {
-            contentType: "image/webp",
-            upsert: true,
-          });
-
-        if (uploadError) {
-          console.warn("Supabase Storage upload failed, saving locally:", uploadError.message);
-          fs.mkdirSync(IMAGES_DIR, { recursive: true });
-          fs.writeFileSync(path.join(IMAGES_DIR, savedName), buffer);
-        } else {
-          const { data: { publicUrl } } = storageClient.storage
-            .from("product-images")
-            .getPublicUrl(savedName);
-          imagePath = publicUrl;
-        }
+        imagePath = await uploadToSupabase(storageClient, savedName, buffer, "image/webp");
       } catch (e) {
-        console.warn("Supabase Storage exception, saving locally:", e.message);
-        fs.mkdirSync(IMAGES_DIR, { recursive: true });
-        fs.writeFileSync(path.join(IMAGES_DIR, savedName), buffer);
+        console.error("Supabase Storage upload failed:", e.message);
+        return NextResponse.json({ error: `Image storage failed: ${e.message}` }, { status: 500 });
       }
     } else {
-      fs.mkdirSync(IMAGES_DIR, { recursive: true });
-      fs.writeFileSync(path.join(IMAGES_DIR, savedName), buffer);
+      console.warn("No Supabase client configured — image not stored.");
+      return NextResponse.json({ error: "Supabase storage is not configured. Set NEXT_PUBLIC_SUPABASE_URL and keys." }, { status: 503 });
     }
 
     // Try Claude vision
@@ -101,7 +96,7 @@ export async function POST(request) {
 
     // Merge with filename fallback
     const fb        = extractFromFilename(savedName);
-    const name      = aiData.name         || fb.name      || path.parse(savedName).name.replace(/[_-]+/g," ");
+    const name      = aiData.name         || fb.name      || savedName.replace(/[_-]+/g," ");
     const basePrice = aiData.base_price   || fb.basePrice || null;
     const code      = aiData.product_code || fb.code      || null;
     const category  = aiData.category     || detectCategory(name + " " + savedName);
@@ -109,7 +104,7 @@ export async function POST(request) {
 
     const product = await addProduct({
       name, product_code: code, price, base_price: basePrice,
-      category, image_path: imagePath,
+      category, image_path: imagePath, images: [imagePath],
       description: aiData.description || null, source,
     });
 
@@ -131,30 +126,23 @@ export async function POST(request) {
 export async function GET() {
   try {
     const storageClient = supabaseAdmin || supabase;
-    if (storageClient) {
-      try {
-        const { data, error } = await storageClient.storage
-          .from("product-images")
-          .list("", { limit: 100 });
-        if (!error && data) {
-          const files = data.map(f => {
-            const { data: { publicUrl } } = storageClient.storage
-              .from("product-images")
-              .getPublicUrl(f.name);
-            return { name: f.name, path: publicUrl };
-          });
-          return NextResponse.json(files);
-        }
-      } catch (e) {
-        console.warn("Supabase Storage list failed, using local files:", e.message);
-      }
+    if (!storageClient) {
+      return NextResponse.json({ error: "Supabase not configured" }, { status: 503 });
     }
 
-    const EXTS = new Set([".jpg",".jpeg",".png",".webp",".gif",".avif"]);
-    fs.mkdirSync(IMAGES_DIR, { recursive: true });
-    const files = fs.readdirSync(IMAGES_DIR)
-      .filter(f => EXTS.has(path.extname(f).toLowerCase()))
-      .map(f => ({ name: f, path: `/images/${f}` }));
+    const { data, error } = await storageClient.storage
+      .from("product-images")
+      .list("", { limit: 200 });
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const files = (data || []).map(f => {
+      const { data: { publicUrl } } = storageClient.storage
+        .from("product-images")
+        .getPublicUrl(f.name);
+      return { name: f.name, path: publicUrl };
+    });
+
     return NextResponse.json(files);
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
