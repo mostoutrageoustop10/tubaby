@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { mergeFromCsv } from "@/lib/products";
-export const dynamic = "force-dynamic";
+export const dynamic = "auto";
 export async function POST(request) {
   try {
     const csvText = await request.text();

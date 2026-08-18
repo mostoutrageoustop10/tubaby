@@ -1,7 +1,7 @@
 import Nav         from "@/components/Nav";
 import AdminClient from "./AdminClient";
 import { getAllProducts, FALLBACK_PRODUCTS } from "@/lib/products";
-export const dynamic = "force-dynamic";
+export const dynamic = "auto";
 export default async function AdminPage() {
   let products;
   try { products = await getAllProducts(); }

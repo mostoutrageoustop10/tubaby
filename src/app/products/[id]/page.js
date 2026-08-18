@@ -1,7 +1,7 @@
 import { getProduct, getAllProducts, FALLBACK_PRODUCTS, suggestBundles } from "@/lib/products";
 import ProductDetailClient from "./ProductDetailClient";
 
-export const dynamic = "force-dynamic";
+export const dynamic = "auto";
 
 export async function generateMetadata({ params }) {
   const id = params?.id;

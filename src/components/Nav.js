@@ -16,7 +16,6 @@ export default function Nav() {
           <div className="nav-links nav-desktop">
             <Link href="/">Shop</Link>
             <Link href="/wishlist">❤️ Wishlist</Link>
-            <Link href="/admin">Admin</Link>
           </div>
 
           <div style={{ display:"flex", alignItems:"center", gap:".6rem" }}>
@@ -44,7 +43,6 @@ export default function Nav() {
               { href:"/",        label:"🛍 Shop" },
               { href:"/wishlist",label:"❤️ Wishlist" },
               { href:"/cart",    label:"🛒 Cart" },
-              { href:"/admin",   label:"⚙️ Admin" },
             ].map(({ href, label }) => (
               <Link key={href} href={href} onClick={() => setMobileOpen(false)}
                 style={{ padding:".6rem .5rem", fontWeight:700, fontSize:".95rem", color:"var(--text)" }}>
@@ -61,7 +59,6 @@ export default function Nav() {
           { href:"/",        icon:"🏠", label:"Shop" },
           { href:"/wishlist",icon:"❤️", label:"Saved" },
           { href:"/cart",    icon:"🛒", label:"Cart", badge: itemCount },
-          { href:"/admin",   icon:"⚙️", label:"Admin" },
         ].map(({ href, icon, label, badge }) => (
           <Link key={href} href={href} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2, position:"relative", padding:"4px 8px", color:"var(--muted)", fontSize:".65rem", fontWeight:700, textDecoration:"none" }}>
             <span style={{ fontSize:"1.2rem" }}>{icon}</span>

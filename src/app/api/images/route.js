@@ -5,7 +5,7 @@ import { compressImage }     from "@/lib/compress";
 import { addProduct, detectCategory, applyMarkup, extractFromFilename } from "@/lib/products";
 import { supabase, supabaseAdmin } from "@/lib/supabase";
 
-export const dynamic = "force-dynamic";
+export const dynamic = "auto";
 
 const IMAGES_DIR = path.join(process.cwd(), "public", "images");
 const ALLOWED    = new Set(["image/jpeg","image/png","image/webp","image/gif","image/avif"]);

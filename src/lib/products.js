@@ -14,6 +14,7 @@ export {
   applyMarkup,
   detectCategory,
   suggestBundles,
+  parseResilientInput,
   FALLBACK_PRODUCTS
 } from "./product-shared";
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAllProducts, addProduct, exportCsv, FALLBACK_PRODUCTS } from "@/lib/products";
-export const dynamic = "force-dynamic";
+export const dynamic = "auto";
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
