@@ -161,9 +161,9 @@ function normalizeProduct(item) {
 // ── CRUD Operations directly against Supabase ─────────────────
 export async function getAllProducts() {
   const client = getClient();
-  const { data, error } = await client
+  const { data, count, error } = await client
     .from("products")
-    .select("*")
+    .select("*", { count: "exact" })
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -173,17 +173,34 @@ export async function getAllProducts() {
 }
 
 export async function getProduct(id) {
+  if (!id) return null;
   const client = getClient();
-  const uuid = toUuid(id);
-  const { data, error } = await client
+  
+  // Direct ID lookup
+  let { data, error } = await client
     .from("products")
     .select("*")
-    .or(`id.eq.${uuid},code.eq.${id}`)
-    .maybeSingle();
+    .eq("id", id)
+    .single();
 
-  if (error) {
-    throw new Error(`Supabase fetch product ${id} failed: ${error.message}`);
+  if (error || !data) {
+    // If id didn't match directly (e.g. searching by SKU/code or uuid)
+    const uuid = toUuid(id);
+    const { data: altData } = await client
+      .from("products")
+      .select("*")
+      .or(`id.eq.${uuid},product_code.eq.${id},code.eq.${id}`)
+      .maybeSingle();
+
+    if (altData) {
+      data = altData;
+    }
   }
+
+  if (!data) {
+    return null;
+  }
+
   return normalizeProduct(data);
 }
 

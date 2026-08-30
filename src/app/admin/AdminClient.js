@@ -636,6 +636,8 @@ function AiProductIngestionSystem({ categories, onProductAdded, onBulkProductsAd
                   alt=""
                   width={46}
                   height={46}
+                  loading="lazy"
+                  decoding="async"
                   style={{ borderRadius: 8, objectFit: "cover", flexShrink: 0, background: "#f3f4f6" }}
                   onError={imgOnError}
                 />
@@ -874,6 +876,8 @@ function ProductEditModal({ product, categories, onClose, onSave }) {
                   alt=""
                   width={40}
                   height={40}
+                  loading="lazy"
+                  decoding="async"
                   style={{ borderRadius: 8, objectFit: "cover", background: "#f1f5f9", flexShrink: 0 }}
                   onError={imgOnError}
                 />
@@ -1358,6 +1362,81 @@ export default function AdminClient({ initialProducts }) {
     setFlash({ msg, type });
     setTimeout(() => setFlash(null), 4000);
   }, []);
+
+  // ── FETCH ALL PRODUCTS DIRECTLY FROM SUPABASE ─────────────────
+  const fetchProductsFromSupabase = useCallback(async () => {
+    const client = supabaseAdmin || supabase;
+    if (!client) return;
+    try {
+      const { data, count, error } = await client
+        .from("products")
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: true });
+
+      if (!error && Array.isArray(data)) {
+        const normalized = data.map(item => {
+          const v = item.variants;
+          const isObjectVariant = v && typeof v === "object" && !Array.isArray(v);
+
+          const colors = isObjectVariant && Array.isArray(v.colors) ? v.colors : (Array.isArray(v) ? v : (item.colors || []));
+          const sizes = isObjectVariant && Array.isArray(v.sizes) ? v.sizes : (item.sizes || []);
+          const showColorSelector = isObjectVariant && typeof v.showColorSelector === "boolean" ? v.showColorSelector : (item.showColorSelector ?? (colors.length > 0));
+          const showSizeSelector = isObjectVariant && typeof v.showSizeSelector === "boolean" ? v.showSizeSelector : (item.showSizeSelector ?? (sizes.length > 0));
+          const in_stock = isObjectVariant && typeof v.in_stock === "boolean" ? v.in_stock : (item.in_stock !== undefined ? Boolean(item.in_stock) : true);
+          const featured = isObjectVariant && typeof v.featured === "boolean" ? v.featured : Boolean(item.featured);
+          const images = isObjectVariant && Array.isArray(v.images) ? v.images : (Array.isArray(item.images) ? item.images : (item.image_url || item.image_path ? [item.image_url || item.image_path] : []));
+          const base_price = isObjectVariant && v.base_price !== undefined ? v.base_price : (item.base_price ?? null);
+          const description = isObjectVariant && v.description ? v.description : (item.description || null);
+
+          const image = resolveImagePath(
+            item.image_url || item.image_path || item.image,
+            item.code || item.product_code
+          );
+          const code = item.product_code || item.code || "";
+
+          return {
+            ...item,
+            id: item.id,
+            name: item.name || "Unnamed Product",
+            product_code: code,
+            code: code,
+            price: Number(item.price) || 0,
+            base_price,
+            category: item.category || "Accessories",
+            image_path: image,
+            image: image,
+            image_url: image,
+            in_stock,
+            featured,
+            colors,
+            sizes,
+            showColorSelector,
+            showSizeSelector,
+            images,
+            description,
+            needs_review: Boolean(item.needs_review),
+            variants: v || []
+          };
+        });
+
+        // Ingest any local cache edits
+        const cachedEdits = getLocalCacheEdits();
+        const merged = normalized.map(p => {
+          const key = p.id || p.product_code || p.code;
+          const cached = cachedEdits[key] || cachedEdits[p.id] || cachedEdits[p.product_code] || cachedEdits[p.code];
+          return cached ? { ...p, ...cached } : p;
+        });
+
+        setProducts(merged);
+      }
+    } catch (err) {
+      console.warn("Could not fetch products directly in AdminClient:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProductsFromSupabase();
+  }, [fetchProductsFromSupabase]);
 
   // ── INGEST LOCALSTORAGE CACHED EDITS ON MOUNT ─────────────────
   useEffect(() => {
@@ -1882,6 +1961,9 @@ export default function AdminClient({ initialProducts }) {
                           alt={p.name}
                           width={48}
                           height={48}
+                          loading="lazy"
+                          decoding="async"
+                          sizes="(max-width: 768px) 100vw, 33vw"
                           style={{ borderRadius: 8, objectFit: "cover", background: "#f3f4f6" }}
                           onError={imgOnError}
                         />

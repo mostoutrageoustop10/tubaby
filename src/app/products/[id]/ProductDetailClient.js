@@ -106,6 +106,9 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
               <img
                 src={activeImage}
                 alt={product.name}
+                loading="lazy"
+                decoding="async"
+                sizes="(max-width: 768px) 100vw, 33vw"
                 onError={imgOnError}
               />
             </div>
@@ -118,6 +121,9 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
                     key={idx}
                     src={resolveImagePath(img)}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
+                    sizes="60px"
                     onClick={() => setActiveImage(resolveImagePath(img))}
                     onError={imgOnError}
                     style={{
