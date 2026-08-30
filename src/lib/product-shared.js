@@ -31,7 +31,7 @@ export function suggestBundles(product, allProducts) {
 
 export function parseResilientInput(data = {}) {
   let rawName = String(data.name || "").trim();
-  let rawCode = String(data.product_code || "").trim();
+  let rawCode = String(data.product_code || data.code || "").trim();
   let rawPrice = data.price;
   let rawBasePrice = data.base_price;
 
@@ -49,7 +49,7 @@ export function parseResilientInput(data = {}) {
   // 2. PRICE PARSING - Strip $, J$, #, ~, extra text, remove commas, normalize decimals
   const cleanPriceStr = (val) => {
     if (typeof val === "number") return isNaN(val) ? null : val;
-    if (!val) return null;
+    if (!val || val === "EDIT_ME") return null;
     let s = String(val)
       .replace(/(?:JMD|J\$|\$|~|#)/gi, "")
       .replace(/,/g, "")
@@ -66,14 +66,14 @@ export function parseResilientInput(data = {}) {
   if (numPrice === null) {
     const textWithoutHash = rawName.replace(/#([A-Za-z0-9.\-]+)/g, "");
     const dollarMatch = textWithoutHash.match(/\$\s*(\d+(?:,\d+)*(?:\.\d+)?)/);
-    const jmdMatch = textWithoutHash.match(/(?:JMD|J\$)\s*(\d+(?:,\d+)*(?:\.\d+)?)/i);
+    const jmdMatch = textWithoutHash.match(/(?:JMD|J\$)\s*(\d+(?:,\d+)*(?:\.\d+)?)|(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:JMD|J\$)/i);
     const tildeMatch = textWithoutHash.match(/~\s*\$?\s*(\d+(?:,\d+)*(?:\.\d+)?)/);
     const standaloneMatch = textWithoutHash.match(/(?:^|[\s_\/\-])(\d{3,6})(?!\s*(?:oz|pcs|pk|pack|ml|g|kg|m|cm|mm|in)\b)(?:[\s_\/\.\-]|$)/i);
 
     if (dollarMatch) {
       numPrice = parseFloat(dollarMatch[1].replace(/,/g, ""));
     } else if (jmdMatch) {
-      numPrice = parseFloat(jmdMatch[1].replace(/,/g, ""));
+      numPrice = parseFloat((jmdMatch[1] || jmdMatch[2]).replace(/,/g, ""));
     } else if (tildeMatch) {
       numPrice = parseFloat(tildeMatch[1].replace(/,/g, ""));
     } else if (standaloneMatch) {
@@ -106,11 +106,13 @@ export function parseResilientInput(data = {}) {
     .trim();
 
   return {
-    ...data,
     name: cleanName || "Product",
-    product_code: code || `#PROD-${Date.now().toString().slice(-6)}`,
+    product_code: code,
+    code: code,
     price: parsedPrice,
-    base_price: rawBasePrice ? cleanPriceStr(rawBasePrice) : null,
+    base_price: numPrice,
+    category: data.category || detectCategory(cleanName),
+    image_path: data.image_path || data.image_url || data.image || "",
     needs_review: needsReview,
   };
 }

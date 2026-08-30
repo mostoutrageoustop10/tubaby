@@ -1,25 +1,12 @@
 // src/components/ProductCard.js
 "use client";
 import Link from "next/link";
+import { resolveImagePath, imgOnError } from "@/lib/imageUtils";
 
 export default function ProductCard({ product, onAddToCart, onWishlist, isWished }) {
   const { id, name, price, product_code, category, image_path, image, in_stock, stock, featured } = product;
 
-  let imgSrc = "/placeholder.png";
-  const rawImage = image_path || image;
-
-  if (rawImage) {
-    let sanitized = rawImage.trim().replace(/\s+/g, "_");
-    if (!/\.\w+$/.test(sanitized)) {
-      sanitized += ".webp";
-    }
-    if (!sanitized.startsWith("/")) {
-      sanitized = `/images/${sanitized}`;
-    }
-    imgSrc = sanitized;
-  } else if (product_code) {
-    imgSrc = `/images/${product_code}.webp`;
-  }
+  const imgSrc = resolveImagePath(image_path || image, product_code);
 
   const isInStock = in_stock ?? stock ?? true;
   const hasPrice  = price && Number(price) > 0;
@@ -51,7 +38,14 @@ export default function ProductCard({ product, onAddToCart, onWishlist, isWished
 
       <Link href={`/products/${id}`}>
         <div className="card-img-wrap">
-          <img src={imgSrc} alt={name} loading="lazy" width={400} height={400} />
+          <img
+            src={imgSrc}
+            alt={name}
+            loading="lazy"
+            width={400}
+            height={400}
+            onError={imgOnError}
+          />
           {!isInStock && <span className="card-badge oos">Out of Stock</span>}
           {isInStock && hasPrice && <span className="card-badge">In Stock</span>}
         </div>

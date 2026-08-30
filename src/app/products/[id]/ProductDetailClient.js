@@ -5,6 +5,8 @@ import Nav from "@/components/Nav";
 import ProductCard from "@/components/ProductCard";
 import { useCart } from "@/lib/CartContext";
 import useWishlist from "@/lib/useWishlist";
+import { resolveImagePath, imgOnError } from "@/lib/imageUtils";
+
 
 const WA_PHONE = "18763405862";
 
@@ -15,7 +17,9 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
   const product = initialProduct;
   const bundles = initialBundles;
 
-  const [activeImage, setActiveImage] = useState(product?.image_path || product?.image || "/placeholder.png");
+  const [activeImage, setActiveImage] = useState(
+    resolveImagePath(product?.image_path || product?.image, product?.product_code)
+  );
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
   const [added, setAdded] = useState(false);
@@ -102,7 +106,7 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
               <img
                 src={activeImage}
                 alt={product.name}
-                onError={e => { e.target.src = "/placeholder.png"; }}
+                onError={imgOnError}
               />
             </div>
 
@@ -112,9 +116,10 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
                 {allImages.map((img, idx) => (
                   <img
                     key={idx}
-                    src={img}
+                    src={resolveImagePath(img)}
                     alt=""
-                    onClick={() => setActiveImage(img)}
+                    onClick={() => setActiveImage(resolveImagePath(img))}
+                    onError={imgOnError}
                     style={{
                       width: 60, height: 60, borderRadius: 8, objectFit: "cover", cursor: "pointer",
                       border: activeImage === img ? "2px solid var(--pink)" : "2px solid transparent",
@@ -143,7 +148,7 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
           <div className="detail-info">
             <span className="detail-cat">{product.category}</span>
             <h1 className="detail-name">{product.name}</h1>
-            <span className="detail-code">Code: #{product.product_code}</span>
+            <span className="detail-code">Code: #{String(product.product_code || product.code || "").replace(/^#/, "")}</span>
 
             {product.description && (
               <p style={{ fontSize: ".95rem", color: "#4b5563", lineHeight: 1.7, marginTop: 8 }}>

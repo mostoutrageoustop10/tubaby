@@ -1,7 +1,8 @@
 import { getProduct, getAllProducts, FALLBACK_PRODUCTS, suggestBundles } from "@/lib/products";
 import ProductDetailClient from "./ProductDetailClient";
 
-export const dynamic = "auto";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function generateMetadata({ params }) {
   const id = params?.id;
@@ -12,11 +13,12 @@ export async function generateMetadata({ params }) {
   } catch {}
 
   if (!product) {
-    product = FALLBACK_PRODUCTS.find(fp => String(fp.id) === String(id)) || FALLBACK_PRODUCTS[0];
+    product = FALLBACK_PRODUCTS.find(fp => String(fp.id) === String(id) || String(fp.product_code) === String(id)) || FALLBACK_PRODUCTS[0];
   }
 
+  const cleanCode = String(product.product_code || product.code || "").replace(/^#/, "");
   const title = `${product.name} | TiiBaby Shop Jamaica`;
-  const description = product.description || `Shop ${product.name} (#${product.product_code}) for $${Number(product.price).toLocaleString()} JMD at TiiBaby Shop Jamaica.`;
+  const description = product.description || `Shop ${product.name} (#${cleanCode}) for $${Number(product.price).toLocaleString()} JMD at TiiBaby Shop Jamaica.`;
   const imageUrl = product.image_path || product.image || "/placeholder.png";
 
   return {

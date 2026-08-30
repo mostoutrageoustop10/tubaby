@@ -1,20 +1,15 @@
 // src/lib/supabase.js
-// Supabase is optional. App works fully without it.
-// When keys are added later, Google login and order history activate automatically.
+import { createClient } from "@supabase/supabase-js";
 
-let supabase      = null;
-let supabaseAdmin = null;
+const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+const SVC = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-try {
-  const URL  = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const SVC  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+export const supabase = (URL && ANON)
+  ? createClient(URL, ANON, { auth: { persistSession: true } })
+  : null;
 
-  if (URL && ANON) {
-    const { createClient } = require("@supabase/supabase-js");
-    supabase      = createClient(URL, ANON, { auth: { persistSession: true } });
-    supabaseAdmin = createClient(URL, SVC || ANON, { auth: { persistSession: false } });
-  }
-} catch {}
+export const supabaseAdmin = (URL && (SVC || ANON))
+  ? createClient(URL, SVC || ANON, { auth: { persistSession: false } })
+  : null;
 
-export { supabase, supabaseAdmin };

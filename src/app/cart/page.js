@@ -3,6 +3,8 @@ import { useState } from "react";
 import Link from "next/link";
 import Nav from "@/components/Nav";
 import { useCart } from "@/lib/CartContext";
+import { resolveImagePath, imgOnError } from "@/lib/imageUtils";
+
 
 const WA_PHONE = "18763405862";
 
@@ -58,10 +60,10 @@ export default function CartPage() {
               return (
                 <div key={key} style={{ display: "flex", gap: "1rem", alignItems: "center", background: "#fff", borderRadius: 14, padding: ".85rem", boxShadow: "0 2px 12px rgba(0,0,0,.06)" }}>
                   <img
-                    src={item.image_path || item.image || "/placeholder.png"}
+                    src={resolveImagePath(item.image_path || item.image, item.product_code)}
                     alt={item.name}
                     width={64} height={64}
-                    onError={e => { e.target.src = "/placeholder.png"; }}
+                    onError={imgOnError}
                     style={{ borderRadius: 10, objectFit: "cover", flexShrink: 0, background: "#f3f4f6" }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
