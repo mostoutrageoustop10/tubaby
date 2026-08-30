@@ -62,6 +62,8 @@ export default function CartPage() {
                   <img
                     src={resolveImagePath(item.image_path || item.image, item.product_code)}
                     alt={item.name}
+                    loading="lazy"
+                    decoding="async"
                     width={64} height={64}
                     onError={imgOnError}
                     style={{ borderRadius: 10, objectFit: "cover", flexShrink: 0, background: "#f3f4f6" }}

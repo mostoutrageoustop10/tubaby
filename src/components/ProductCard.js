@@ -42,6 +42,8 @@ export default function ProductCard({ product, onAddToCart, onWishlist, isWished
             src={imgSrc}
             alt={name}
             loading="lazy"
+            decoding="async"
+            sizes="(max-width: 768px) 100vw, 33vw"
             width={400}
             height={400}
             onError={imgOnError}
