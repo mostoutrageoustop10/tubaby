@@ -44,12 +44,22 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
   const hasPrice = product.price && Number(product.price) > 0;
   const displayPrice = hasPrice ? `$${Number(product.price).toLocaleString()} JMD` : "Price coming soon";
 
-  // Variant Display Rules
-  const colors = product.colors || [];
-  const sizes = product.sizes || [];
+  // Variant Display Rules & Safe Normalization
+  const rawColors = product?.colors;
+  const colors = Array.isArray(rawColors)
+    ? rawColors.map(c => {
+        if (typeof c === "string") return { name: c.trim(), inStock: true };
+        if (c && typeof c === "object") return { name: c.name || c.color || "Option", hex: c.hex, inStock: c.inStock !== false };
+        return null;
+      }).filter(Boolean)
+    : (typeof rawColors === "string" && rawColors.trim()
+        ? rawColors.split(",").map(c => ({ name: c.trim(), inStock: true }))
+        : []);
 
-  const shouldShowColors = (product.showColorSelector ?? (colors.length > 0)) && colors.length > 0;
-  const shouldShowSizes = (product.showSizeSelector ?? (sizes.length > 0)) && sizes.length > 0;
+  const sizes = Array.isArray(product?.sizes) ? product.sizes : [];
+
+  const shouldShowColors = (product?.showColorSelector ?? (colors.length > 0)) && colors.length > 0;
+  const shouldShowSizes = (product?.showSizeSelector ?? (sizes.length > 0)) && sizes.length > 0;
 
   // Multiple Images list
   const allImages = Array.from(new Set([
@@ -62,13 +72,14 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
   const buildWaUrl = () => {
     const variantParts = [];
     if (shouldShowColors && selectedColor) {
-      variantParts.push(`Color: ${selectedColor.name}`);
+      const cName = typeof selectedColor === "string" ? selectedColor : (selectedColor.name || "Selected");
+      variantParts.push(`Color: ${cName}`);
     }
     if (shouldShowSizes && selectedSize) {
       variantParts.push(`Size: ${selectedSize}`);
     }
 
-    let itemInfo = `Item: ${product.name} #${product.product_code}`;
+    let itemInfo = `Item: ${product.name} #${product.product_code || product.code || ""}`;
     if (variantParts.length > 0) {
       itemInfo += ` | ${variantParts.join(" | ")}`;
     }
@@ -79,8 +90,9 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
 
   const handleAddToCart = () => {
     if (!product) return;
+    const chosenColor = shouldShowColors ? (selectedColor?.name || selectedColor || null) : null;
     addToCart(product, 1, {
-      selectedColor: shouldShowColors ? selectedColor : null,
+      selectedColor: chosenColor,
       selectedSize: shouldShowSizes ? selectedSize : null,
     });
     setAdded(true);
@@ -150,12 +162,6 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
             <h1 className="detail-name">{product.name}</h1>
             <span className="detail-code">Code: #{String(product.product_code || product.code || "").replace(/^#/, "")}</span>
 
-            {product.description && (
-              <p style={{ fontSize: ".95rem", color: "#4b5563", lineHeight: 1.7, marginTop: 8 }}>
-                {product.description}
-              </p>
-            )}
-
             <div className="detail-price">{displayPrice}</div>
 
             {!isInStock && (
@@ -164,46 +170,54 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
               </div>
             )}
 
-            {/* COLOR SELECTOR (Strictly rendered based on display rule) */}
+            {/* COLOR BADGE LIST (Rendered with fallback handling) */}
             {shouldShowColors && (
-              <div style={{ marginTop: "1rem", background: "#fafafa", padding: "1rem", borderRadius: 12, border: "1px solid #f3f4f6" }}>
-                <label style={{ display: "block", fontSize: ".88rem", fontWeight: 800, marginBottom: ".6rem", color: "#374151" }}>
-                  Color: <span style={{ color: "var(--pink)", fontWeight: 700 }}>{selectedColor ? selectedColor.name : "Select Option"}</span>
-                </label>
+              <div style={{ marginTop: "1.25rem", background: "#fafafa", padding: "1rem", borderRadius: 12, border: "1px solid #f3f4f6" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: ".6rem" }}>
+                  <label style={{ fontSize: ".88rem", fontWeight: 800, color: "#374151", margin: 0 }}>
+                    Color: <span style={{ color: "var(--pink)", fontWeight: 700 }}>{selectedColor ? (selectedColor.name || selectedColor) : "Select an option"}</span>
+                  </label>
+                  <span style={{ fontSize: ".75rem", color: "#9ca3af" }}>
+                    {colors.length} {colors.length === 1 ? "option" : "options"}
+                  </span>
+                </div>
 
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {colors.map((color, idx) => {
-                    const isAvailable = color.inStock !== false;
-                    const isSelected = selectedColor?.name === color.name;
+                    const colorName = typeof color === "string" ? color : (color?.name || "Color");
+                    const colorHex = typeof color === "object" ? color?.hex : null;
+                    const isAvailable = typeof color === "object" ? color.inStock !== false : true;
+                    const isSelected = selectedColor && ((selectedColor.name || selectedColor) === colorName);
 
                     return (
                       <button
                         key={idx}
+                        type="button"
                         disabled={!isAvailable}
                         onClick={() => setSelectedColor(color)}
-                        title={!isAvailable ? `${color.name} (Out of Stock)` : color.name}
+                        title={!isAvailable ? `${colorName} (Out of Stock)` : colorName}
                         style={{
-                          display: "flex", alignItems: "center", gap: 8, padding: "6px 12px",
+                          display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 14px",
                           borderRadius: 20, border: isSelected ? "2px solid var(--pink)" : "1px solid #d1d5db",
                           background: isSelected ? "#fff0f6" : "#ffffff",
                           cursor: isAvailable ? "pointer" : "not-allowed",
                           opacity: isAvailable ? 1 : 0.45,
-                          position: "relative", overflow: "hidden",
-                          transition: "all .2s"
+                          boxShadow: isSelected ? "0 2px 6px rgba(236,72,153,0.2)" : "none",
+                          transition: "all .2s ease"
                         }}
                       >
                         <span
                           style={{
-                            width: 18, height: 18, borderRadius: "50%",
-                            background: color.hex, border: "1px solid rgba(0,0,0,0.15)",
-                            position: "relative"
+                            width: 14, height: 14, borderRadius: "50%",
+                            background: colorHex || "#d1d5db", border: "1px solid rgba(0,0,0,0.15)",
+                            display: "inline-block"
                           }}
                         />
                         <span style={{ fontSize: ".82rem", fontWeight: 700, textDecoration: !isAvailable ? "line-through" : "none", color: isAvailable ? "#1f2937" : "#9ca3af" }}>
-                          {color.name}
+                          {colorName}
                         </span>
                         {!isAvailable && (
-                          <span style={{ fontSize: ".7rem", color: "#dc2626", fontWeight: 800 }}>
+                          <span style={{ fontSize: ".68rem", color: "#dc2626", fontWeight: 800 }}>
                             (OOS)
                           </span>
                         )}
@@ -272,7 +286,26 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
               </div>
             )}
 
-            <Link href="/" className="btn btn-outline" style={{ textAlign: "center", marginTop: "1rem" }}>
+            {/* Product Description Section */}
+            <div style={{ marginTop: "1.75rem", padding: "1.25rem", background: "#fdf8f6", borderRadius: 14, border: "1px solid #fee2e2" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: "0.5rem" }}>
+                <span style={{ fontSize: "1.1rem" }}>📋</span>
+                <h3 style={{ fontSize: ".9rem", fontWeight: 800, color: "#1f2937", margin: 0, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Product Description
+                </h3>
+              </div>
+              {product.description && product.description.trim() ? (
+                <p style={{ fontSize: ".95rem", color: "#374151", lineHeight: 1.7, margin: 0, whiteSpace: "pre-line" }}>
+                  {product.description}
+                </p>
+              ) : (
+                <p style={{ fontSize: ".88rem", color: "#6b7280", fontStyle: "italic", margin: 0 }}>
+                  High-quality baby essential from TiiBaby Shop Jamaica. Designed for comfort, durability, and safety. Contact us on WhatsApp for any specific questions.
+                </p>
+              )}
+            </div>
+
+            <Link href="/" className="btn btn-outline" style={{ textAlign: "center", marginTop: "1.25rem" }}>
               ← Continue Shopping
             </Link>
           </div>

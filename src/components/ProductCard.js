@@ -36,7 +36,7 @@ export default function ProductCard({ product, onAddToCart, onWishlist, isWished
         }}>⭐ Featured</div>
       )}
 
-      <Link href={`/products/${id}`}>
+      <Link href={`/products/${product.slug || id}`}>
         <div className="card-img-wrap">
           <img
             src={imgSrc}

@@ -31,3 +31,12 @@ yarn-error.log*
 # System files
 .DS_Store
 Thumbs.db
+
+# Ensure catalog images and webp are never ignored
+!public/images/
+!public/images/**
+!*.webp
+
+# Local browser snapshots
+*.html
+*_files/

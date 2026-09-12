@@ -1,4 +1,4 @@
-﻿// src/lib/imageUtils.js
+// src/lib/imageUtils.js
 // Canonical utility for resolving + sanitizing product image paths.
 
 export const PLACEHOLDER = "/placeholder.png";
@@ -20,15 +20,19 @@ function hasImageExtension(str) {
  *  4. Relative filename                    → sanitise spaces, add .webp if needed, prefix /images/
  */
 export function resolveImagePath(rawPath, productCode = null) {
-  const raw = typeof rawPath === "string" ? rawPath.trim() : "";
+  let raw = typeof rawPath === "string" ? rawPath.trim() : "";
   if (!raw) {
     if (productCode) {
-      const clean = String(productCode).replace(/^#/, "").trim();
+      const clean = String(productCode).replace(/^#/, "").trim().replace(/\s+/g, "_");
       return clean ? `/images/${clean}.webp` : PLACEHOLDER;
     }
     return PLACEHOLDER;
   }
 
+  // Normalize windows backslashes
+  raw = raw.replace(/\\/g, "/");
+
+  // Full URL or data/blob
   if (
     raw.startsWith("http://") ||
     raw.startsWith("https://") ||
@@ -38,17 +42,20 @@ export function resolveImagePath(rawPath, productCode = null) {
     return raw;
   }
 
-  if (raw.startsWith("/")) {
-    if (!hasImageExtension(raw)) {
-      return `${raw}.webp`;
-    }
-    return raw;
+  // Root-relative path that is not an images folder path (e.g. /placeholder.png, /favicon.ico)
+  if (raw.startsWith("/") && !/^\/?images\//i.test(raw)) {
+    return hasImageExtension(raw) ? raw : `${raw}.webp`;
   }
 
-  let sanitized = raw.replace(/\s+/g, "_");
+  // Strip any leading /images/ or images/ prefix
+  const stripped = raw.replace(/^\/?images\//i, "");
+
+  // Replace spaces with underscores
+  let sanitized = stripped.replace(/\s+/g, "_");
   if (!hasImageExtension(sanitized)) {
     sanitized += ".webp";
   }
+
   return `/images/${sanitized}`;
 }
 

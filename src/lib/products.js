@@ -1,12 +1,12 @@
 // src/lib/products.js
 import nodePath from "path";
-import { supabase, supabaseAdmin } from "./supabase";
+import { supabase, supabaseAdmin } from "./supabase.js";
 import {
   applyMarkup,
   detectCategory,
   parseResilientInput,
-} from "./product-shared";
-import { resolveImagePath } from "./imageUtils";
+} from "./product-shared.js";
+import { resolveImagePath } from "./imageUtils.js";
 
 
 export {
@@ -16,7 +16,7 @@ export {
   suggestBundles,
   parseResilientInput,
   FALLBACK_PRODUCTS
-} from "./product-shared";
+} from "./product-shared.js";
 
 export function extractFromFilename(filename) {
   if (!filename) return { name: "Product", code: null, basePrice: null };
@@ -112,12 +112,80 @@ export function toUuid(seed) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
+const COLOR_HEX_MAP = {
+  pink: "#f472b6",
+  rose: "#fb7185",
+  red: "#ef4444",
+  blue: "#60a5fa",
+  teal: "#2dd4bf",
+  green: "#4ade80",
+  yellow: "#facc15",
+  orange: "#fb923c",
+  purple: "#c084fc",
+  white: "#f9fafb",
+  black: "#1f2937",
+  grey: "#9ca3af",
+  gray: "#9ca3af",
+  brown: "#a16207",
+  beige: "#f5f5dc",
+  navy: "#1e3a8a",
+  cream: "#fffdd0",
+};
+
+function resolveColorHex(name) {
+  if (!name || typeof name !== "string") return "#d1d5db";
+  const lower = name.toLowerCase();
+  for (const [k, v] of Object.entries(COLOR_HEX_MAP)) {
+    if (lower.includes(k)) return v;
+  }
+  return "#e2e8f0";
+}
+
+function normalizeColorsList(rawColors, variants) {
+  const v = variants;
+  const isObjectVariant = v && typeof v === "object" && !Array.isArray(v);
+  const src = (rawColors && (Array.isArray(rawColors) ? rawColors.length > 0 : String(rawColors).trim()))
+    ? rawColors
+    : (isObjectVariant && Array.isArray(v?.colors) ? v.colors : (Array.isArray(v) ? v : []));
+
+  if (Array.isArray(src)) {
+    return src.map(c => {
+      if (typeof c === "string") {
+        const trimmed = c.trim();
+        return { name: trimmed, hex: resolveColorHex(trimmed), inStock: true };
+      }
+      if (c && typeof c === "object") {
+        const name = c.name || c.color || c.label || "Option";
+        return {
+          name,
+          hex: c.hex || resolveColorHex(name),
+          inStock: c.inStock !== false
+        };
+      }
+      return null;
+    }).filter(Boolean);
+  }
+
+  if (typeof src === "string") {
+    return src.split(",").map(s => s.trim()).filter(Boolean).map(name => ({
+      name,
+      hex: resolveColorHex(name),
+      inStock: true
+    }));
+  }
+
+  return [];
+}
+
+export const PRODUCT_COLUMNS = "id, name, price, code, category, description, slug, colors, meta_title, image_url, in_stock, needs_review, created_at, variants";
+export const PRODUCT_COLUMNS_FALLBACK = "id, name, price, code, category, description, slug, meta_title, image_url, in_stock, needs_review, created_at, variants";
+
 function normalizeProduct(item) {
   if (!item) return null;
   const v = item.variants;
   const isObjectVariant = v && typeof v === "object" && !Array.isArray(v);
 
-  const colors = isObjectVariant && Array.isArray(v.colors) ? v.colors : (Array.isArray(v) ? v : (item.colors || []));
+  const colors = normalizeColorsList(item.colors, v);
   const sizes = isObjectVariant && Array.isArray(v.sizes) ? v.sizes : (item.sizes || []);
   const showColorSelector = isObjectVariant && typeof v.showColorSelector === "boolean" ? v.showColorSelector : (item.showColorSelector ?? (colors.length > 0));
   const showSizeSelector = isObjectVariant && typeof v.showSizeSelector === "boolean" ? v.showSizeSelector : (item.showSizeSelector ?? (sizes.length > 0));
@@ -125,7 +193,9 @@ function normalizeProduct(item) {
   const featured = isObjectVariant && typeof v.featured === "boolean" ? v.featured : Boolean(item.featured);
   const images = isObjectVariant && Array.isArray(v.images) ? v.images : (Array.isArray(item.images) ? item.images : (item.image_url || item.image_path ? [item.image_url || item.image_path] : []));
   const base_price = isObjectVariant && v.base_price !== undefined ? v.base_price : (item.base_price ?? null);
-  const description = isObjectVariant && v.description ? v.description : (item.description || null);
+  const description = (item.description && typeof item.description === "string" && item.description.trim())
+    ? item.description.trim()
+    : (isObjectVariant && v.description ? v.description : null);
 
   const image = resolveImagePath(
     item.image_url || item.image_path || item.image,
@@ -133,12 +203,18 @@ function normalizeProduct(item) {
   );
   const code = item.code || item.product_code || "";
 
+  const slug = item.slug || (item.name ? item.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : String(item.id || ""));
+  const meta_title = (item.meta_title && typeof item.meta_title === "string" && item.meta_title.trim())
+    ? item.meta_title.trim()
+    : (item.name ? `${item.name} | TiiBaby Shop Jamaica` : null);
+
   return {
     ...item,
     id: item.id,
     name: item.name || "Unnamed Product",
     product_code: code,
     code: code,
+    slug,
     price: Number(item.price) || 0,
     base_price,
     category: item.category || "Accessories",
@@ -153,6 +229,7 @@ function normalizeProduct(item) {
     showSizeSelector,
     images,
     description,
+    meta_title,
     needs_review: Boolean(item.needs_review),
     variants: v || []
   };
@@ -161,10 +238,20 @@ function normalizeProduct(item) {
 // ── CRUD Operations directly against Supabase ─────────────────
 export async function getAllProducts() {
   const client = getClient();
-  const { data, error } = await client
+  let { data, error } = await client
     .from("products")
-    .select("*")
+    .select(PRODUCT_COLUMNS)
     .order("created_at", { ascending: true });
+
+  if (error && error.code === "42703") {
+    // Retry without colors column if not present in schema cache
+    const retry = await client
+      .from("products")
+      .select(PRODUCT_COLUMNS_FALLBACK)
+      .order("created_at", { ascending: true });
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     throw new Error(`Supabase fetch failed: ${error.message}`);
@@ -172,17 +259,62 @@ export async function getAllProducts() {
   return (data || []).map(normalizeProduct);
 }
 
-export async function getProduct(id) {
+export async function getProduct(identifier) {
+  if (!identifier) return null;
   const client = getClient();
-  const uuid = toUuid(id);
-  const { data, error } = await client
-    .from("products")
-    .select("*")
-    .or(`id.eq.${uuid},code.eq.${id}`)
-    .maybeSingle();
+  const cleanId = String(identifier).trim();
+  const uuid = toUuid(cleanId);
+  const cleanCode = cleanId.replace(/^#/, "");
+
+  const queryCols = async (cols) => {
+    // 1. If valid UUID string, try by id directly
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+    if (isUuid) {
+      const byId = await client.from("products").select(cols).eq("id", cleanId).maybeSingle();
+      if (byId.data) return byId;
+    }
+
+    // 2. Try by slug
+    const bySlug = await client.from("products").select(cols).eq("slug", cleanId).maybeSingle();
+    if (bySlug.data) return bySlug;
+
+    // 3. Try by code or deterministic UUID
+    const byCodeOrUuid = await client
+      .from("products")
+      .select(cols)
+      .or(`code.eq.${cleanId},code.eq.${cleanCode},id.eq.${uuid}`)
+      .limit(1);
+
+    if (byCodeOrUuid.data && byCodeOrUuid.data.length > 0) {
+      return { data: byCodeOrUuid.data[0], error: null };
+    }
+
+    // 4. Try by approximate name if slug is not yet populated in DB
+    const nameSearch = cleanId.replace(/[-_]+/g, " ").trim();
+    if (nameSearch.length >= 3) {
+      const byName = await client
+        .from("products")
+        .select(cols)
+        .ilike("name", `%${nameSearch}%`)
+        .limit(1);
+
+      if (byName.data && byName.data.length > 0) {
+        return { data: byName.data[0], error: null };
+      }
+    }
+
+    return { data: null, error: byCodeOrUuid.error };
+  };
+
+  let { data, error } = await queryCols(PRODUCT_COLUMNS);
+  if (error && error.code === "42703") {
+    const retry = await queryCols(PRODUCT_COLUMNS_FALLBACK);
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
-    throw new Error(`Supabase fetch product ${id} failed: ${error.message}`);
+    throw new Error(`Supabase fetch product ${cleanId} failed: ${error.message}`);
   }
   return normalizeProduct(data);
 }
