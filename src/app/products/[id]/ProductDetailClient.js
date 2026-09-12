@@ -18,7 +18,10 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
   const bundles = initialBundles;
 
   const [activeImage, setActiveImage] = useState(
-    resolveImagePath(product?.image_path || product?.image, product?.product_code)
+    resolveImagePath(
+      product?.image_url || product?.image_path || product?.image,
+      product?.product_code
+    )
   );
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
@@ -61,12 +64,13 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
   const shouldShowColors = (product?.showColorSelector ?? (colors.length > 0)) && colors.length > 0;
   const shouldShowSizes = (product?.showSizeSelector ?? (sizes.length > 0)) && sizes.length > 0;
 
-  // Multiple Images list
+  // Multiple Images list — image_url is the canonical DB field
   const allImages = Array.from(new Set([
+    product.image_url,
     product.image_path,
     product.image,
     ...(product.images || [])
-  ])).filter(Boolean);
+  ].filter(Boolean))).map(img => resolveImagePath(img));
 
   // Format WhatsApp Payload
   const buildWaUrl = () => {
@@ -128,9 +132,9 @@ export default function ProductDetailClient({ initialProduct, initialBundles = [
                 {allImages.map((img, idx) => (
                   <img
                     key={idx}
-                    src={resolveImagePath(img)}
+                    src={img}
                     alt=""
-                    onClick={() => setActiveImage(resolveImagePath(img))}
+                    onClick={() => setActiveImage(img)}
                     onError={imgOnError}
                     style={{
                       width: 60, height: 60, borderRadius: 8, objectFit: "cover", cursor: "pointer",

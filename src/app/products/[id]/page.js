@@ -1,4 +1,5 @@
-import { getProduct, getAllProducts, FALLBACK_PRODUCTS, suggestBundles } from "@/lib/products.js";
+import { notFound } from "next/navigation";
+import { getProduct, getAllProducts, suggestBundles } from "@/lib/products.js";
 import { resolveImagePath } from "@/lib/imageUtils.js";
 import ProductDetailClient from "./ProductDetailClient";
 
@@ -6,34 +7,29 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function generateMetadata({ params }) {
-  const idOrSlug = params?.id || params?.slug;
-  let product = null;
+  const { id: idOrSlug } = await params;
+  if (!idOrSlug) return { title: "Product Not Found | TiiBaby Shop Jamaica" };
 
+  let product = null;
   try {
     product = await getProduct(idOrSlug);
-  } catch {}
-
-  if (!product) {
-    product = FALLBACK_PRODUCTS.find(
-      fp => String(fp.id) === String(idOrSlug) ||
-            String(fp.product_code) === String(idOrSlug) ||
-            String(fp.code) === String(idOrSlug) ||
-            String(fp.slug) === String(idOrSlug)
-    ) || FALLBACK_PRODUCTS[0];
+  } catch {
+    // Supabase unreachable — return minimal metadata
+    return { title: "TiiBaby Shop Jamaica" };
   }
 
-  const cleanCode = String(product?.product_code || product?.code || "").replace(/^#/, "");
-  const title = (product?.meta_title && product.meta_title.trim())
-    ? product.meta_title.trim()
-    : (product?.name ? `${product.name} | TiiBaby Shop Jamaica` : "TiiBaby Shop Jamaica");
+  if (!product) {
+    return { title: "Product Not Found | TiiBaby Shop Jamaica" };
+  }
 
-  const description = (product?.description && product.description.trim())
-    ? product.description.trim()
-    : (product?.name
-        ? `Shop ${product.name}${cleanCode ? ` (#${cleanCode})` : ""} for $${Number(product?.price || 0).toLocaleString()} JMD at TiiBaby Shop Jamaica.`
-        : "Premium baby products in Jamaica. Fast island-wide delivery.");
+  const cleanCode = String(product.product_code || product.code || "").replace(/^#/, "");
+  const title = product.meta_title?.trim()
+    || `${product.name} | TiiBaby Shop Jamaica`;
 
-  const imageUrl = resolveImagePath(product?.image_path || product?.image_url || product?.image || "/placeholder.png");
+  const description = product.description?.trim()
+    || `Shop ${product.name}${cleanCode ? ` (#${cleanCode})` : ""} for $${Number(product.price || 0).toLocaleString()} JMD at TiiBaby Shop Jamaica.`;
+
+  const imageUrl = resolveImagePath(product.image_url || product.image_path || product.image);
 
   return {
     title,
@@ -41,14 +37,7 @@ export async function generateMetadata({ params }) {
     openGraph: {
       title,
       description,
-      images: [
-        {
-          url: imageUrl,
-          width: 800,
-          height: 800,
-          alt: product?.name || "TiiBaby Shop",
-        },
-      ],
+      images: [{ url: imageUrl, width: 800, height: 800, alt: product.name }],
       type: "website",
       siteName: "TiiBaby Shop 🌸",
     },
@@ -62,47 +51,55 @@ export async function generateMetadata({ params }) {
 }
 
 export default async function ProductPage({ params }) {
-  const idOrSlug = params?.id || params?.slug;
+  const { id: idOrSlug } = await params;
+
+  if (!idOrSlug) {
+    notFound();
+  }
+
   let product = null;
   let bundles = [];
 
   try {
     product = await getProduct(idOrSlug);
-    const all = await getAllProducts().catch(() => FALLBACK_PRODUCTS);
-    if (product && Array.isArray(all)) {
+  } catch (err) {
+    console.error(`[ProductPage] Supabase error for "${idOrSlug}":`, err?.message);
+    // Don't fall back to a hardcoded product — let Next.js show 404
+    notFound();
+  }
+
+  // No matching product in the database → proper 404
+  if (!product) {
+    notFound();
+  }
+
+  // Fetch bundles (non-fatal)
+  try {
+    const all = await getAllProducts();
+    if (Array.isArray(all)) {
       bundles = suggestBundles(product, all);
     }
   } catch {
-    product = FALLBACK_PRODUCTS.find(
-      fp => String(fp.id) === String(idOrSlug) ||
-            String(fp.product_code) === String(idOrSlug) ||
-            String(fp.code) === String(idOrSlug) ||
-            String(fp.slug) === String(idOrSlug)
-    ) || FALLBACK_PRODUCTS[0];
+    // Bundles are optional — continue without them
   }
 
-  if (!product) {
-    product = FALLBACK_PRODUCTS[0];
-  }
-
-  // Schema.org Product JSON-LD
+  // Schema.org JSON-LD
   const jsonLd = {
     "@context": "https://schema.org/",
     "@type": "Product",
-    "name": product.name,
-    "image": product.image_path ? [product.image_path] : [],
-    "description": product.description || product.name,
-    "sku": product.product_code || product.code || "",
-    "offers": {
+    name: product.name,
+    image: product.image_url ? [product.image_url] : [],
+    description: product.description || product.name,
+    sku: product.code || product.product_code || "",
+    offers: {
       "@type": "Offer",
-      "priceCurrency": "JMD",
-      "price": product.price || 0,
-      "availability": product.in_stock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-      "seller": {
-        "@type": "Organization",
-        "name": "TiiBaby Shop"
-      }
-    }
+      priceCurrency: "JMD",
+      price: product.price || 0,
+      availability: product.in_stock
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
+      seller: { "@type": "Organization", name: "TiiBaby Shop" },
+    },
   };
 
   return (
