@@ -263,33 +263,45 @@ export async function getProduct(identifier) {
   if (!identifier) return null;
   const client = getClient();
   const cleanId = String(identifier).trim();
-  const uuid = toUuid(cleanId);
-  const cleanCode = cleanId.replace(/^#/, "");
+  const cleanCode = cleanId.startsWith("#") ? cleanId : `#${cleanId}`;
+  const cleanCodeBare = cleanId.replace(/^#/, "");
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
 
   const queryCols = async (cols) => {
-    // 1. If valid UUID string, try by id directly
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+    // 1. Single OR query — slug, code (with & without #), and direct UUID in one round-trip.
+    //    This covers all standard product URL patterns without multiple waterfalled fetches.
+    const orParts = [
+      `slug.eq.${cleanId}`,
+      `code.eq.${cleanId}`,
+      `code.eq.${cleanCode}`,
+      `code.eq.${cleanCodeBare}`,
+    ];
     if (isUuid) {
-      const byId = await client.from("products").select(cols).eq("id", cleanId).maybeSingle();
-      if (byId.data) return byId;
+      orParts.push(`id.eq.${cleanId}`);
     }
 
-    // 2. Try by slug
-    const bySlug = await client.from("products").select(cols).eq("slug", cleanId).maybeSingle();
-    if (bySlug.data) return bySlug;
-
-    // 3. Try by code or deterministic UUID
-    const byCodeOrUuid = await client
+    const primary = await client
       .from("products")
       .select(cols)
-      .or(`code.eq.${cleanId},code.eq.${cleanCode},id.eq.${uuid}`)
+      .or(orParts.join(","))
       .limit(1);
 
-    if (byCodeOrUuid.data && byCodeOrUuid.data.length > 0) {
-      return { data: byCodeOrUuid.data[0], error: null };
+    if (primary.data && primary.data.length > 0) {
+      return { data: primary.data[0], error: null };
     }
 
-    // 4. Try by approximate name if slug is not yet populated in DB
+    // 2. Deterministic UUID fallback (legacy links generated from a code hash)
+    if (!isUuid) {
+      const derivedUuid = toUuid(cleanId);
+      const byDerivedUuid = await client
+        .from("products")
+        .select(cols)
+        .eq("id", derivedUuid)
+        .maybeSingle();
+      if (byDerivedUuid.data) return byDerivedUuid;
+    }
+
+    // 3. Fuzzy name search — last resort for slugs not yet stored in DB
     const nameSearch = cleanId.replace(/[-_]+/g, " ").trim();
     if (nameSearch.length >= 3) {
       const byName = await client
@@ -297,24 +309,24 @@ export async function getProduct(identifier) {
         .select(cols)
         .ilike("name", `%${nameSearch}%`)
         .limit(1);
-
       if (byName.data && byName.data.length > 0) {
         return { data: byName.data[0], error: null };
       }
     }
 
-    return { data: null, error: byCodeOrUuid.error };
+    return { data: null, error: primary.error };
   };
 
   let { data, error } = await queryCols(PRODUCT_COLUMNS);
   if (error && error.code === "42703") {
+    // Retry without colors column if not in schema cache yet
     const retry = await queryCols(PRODUCT_COLUMNS_FALLBACK);
     data = retry.data;
     error = retry.error;
   }
 
   if (error) {
-    throw new Error(`Supabase fetch product ${cleanId} failed: ${error.message}`);
+    throw new Error(`Supabase fetch product "${cleanId}" failed: ${error.message}`);
   }
   return normalizeProduct(data);
 }

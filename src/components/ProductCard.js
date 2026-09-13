@@ -4,9 +4,12 @@ import Link from "next/link";
 import { resolveImagePath, imgOnError } from "@/lib/imageUtils";
 
 export default function ProductCard({ product, onAddToCart, onWishlist, isWished }) {
-  const { id, name, price, product_code, category, image_path, image, in_stock, stock, featured } = product;
+  const { id, name, price, product_code, code, slug, category, image_url, image_path, image, in_stock, stock, featured } = product;
 
-  const imgSrc = resolveImagePath(image_path || image, product_code);
+  const imgSrc = resolveImagePath(image_url || image_path || image, product_code || code);
+
+  // Prefer slug, then code (always resolvable), then UUID as last resort
+  const productHref = `/products/${encodeURIComponent(slug || product_code || code || id)}`;
 
   const isInStock = in_stock ?? stock ?? true;
   const hasPrice  = price && Number(price) > 0;
@@ -36,7 +39,7 @@ export default function ProductCard({ product, onAddToCart, onWishlist, isWished
         }}>⭐ Featured</div>
       )}
 
-      <Link href={`/products/${product.slug || id}`}>
+      <Link href={productHref}>
         <div className="card-img-wrap">
           <img
             src={imgSrc}
